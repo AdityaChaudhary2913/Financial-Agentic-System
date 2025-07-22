@@ -1,6 +1,0 @@
-README.md
-setup.py
-Financial_Agent_System.egg-info/PKG-INFO
-Financial_Agent_System.egg-info/SOURCES.txt
-Financial_Agent_System.egg-info/dependency_links.txt
-Financial_Agent_System.egg-info/top_level.txt
