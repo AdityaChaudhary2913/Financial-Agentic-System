@@ -22,6 +22,12 @@ class ProductionFiMCPClient:
         self.authenticated = False
         self.response_cache: Dict[str, Any] = {}
         logging.info("ProductionFiMCPClient initialized.")
+    
+    # def reset(self):                                                                                   
+    #     """Resets the client's authentication state and session ID."""                                 
+    #     self.authenticated = False                                                                     
+    #     self.session_id = None                                                                         
+    #     logging.info("ProductionFiMCPClient state has been reset.") 
 
     async def authenticate(self, phone_number: str) -> bool:
         """

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "server": "cd fi-mcp-dev && FI_MCP_PORT=8080 go run .",
-    "agent": "cd ai-agents && python3 main.py",
+    "agent": "cd project-artha && python3 main_runner.py",
     "dev": "concurrently -n \"server,agent\" -c \"bgYellow,bgBlue\" \"npm run server\" \"npm run agent\""
   },
   "keywords": [],
