@@ -1,3 +1,5 @@
 aiohttp
 google-generativeai
 google-adk
+yfinance
+numpy

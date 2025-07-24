@@ -1,151 +1,161 @@
-# # agents/data_integration_agent.py
-
-# import asyncio
-# import logging, time
-# from google.adk.agents import LlmAgent
-# from google.adk.tools import ToolContext
-# from tools.fi_mcp_connector import ProductionFiMCPClient
-
-# # In a real app, the client might be a shared instance.
-# mcp_client = ProductionFiMCPClient()
-
-# async def process_and_structure_data(phone_number: str, tool_context: ToolContext) -> dict:
-#     """
-#     Orchestrates fetching all financial data for a user in parallel, authenticating if necessary.
-#     It then structures this data into a unified state object and saves it to the
-#     user's persistent state for other agents to use.
-
-#     Args:
-#         phone_number: The user's phone number for authentication and data fetching.
-#         tool_context: The ADK ToolContext for state management.
-
-#     Returns:
-#         A dictionary summarizing the outcome of the integration process.
-#     """
-#     # 1. Authenticate the client
-#     auth_success = await mcp_client.authenticate(phone_number)
-#     if not auth_success:
-#         return {"status": "error", "message": "Authentication with Fi MCP server failed."}
-
-#     # 2. Define all required data sources to be fetched in parallel
-#     data_sources = [
-#         "fetch_net_worth", "fetch_credit_report", "fetch_epf_details",
-#         "fetch_mf_transactions", "fetch_bank_transactions", "fetch_stock_transactions"
-#     ]
-#     tasks = [mcp_client.call_tool(source) for source in data_sources]
-#     results = await asyncio.gather(*tasks, return_exceptions=True)
-
-#     # 3. Structure the fetched data into a unified state object
-#     raw_financial_data = dict(zip(data_sources, results))
-#     unified_state = {"raw_data": {}, "data_gaps": [], "integration_timestamp": time.time()}
-
-#     for source, result in raw_financial_data.items():
-#         if isinstance(result, Exception):
-#             unified_state["data_gaps"].append(source)
-#             logging.warning(f"Failed to fetch {source}: {result}")
-#         else:
-#             unified_state["raw_data"][source] = result
-
-#     # 4. Save the final state to user-scoped persistence for access by other agents
-#     # This is a critical step for inter-agent communication.
-#     tool_context.state[f"user:financial_state"] = unified_state
-#     logging.info(f"Unified financial state for user {phone_number} saved to persistent state.")
-
-#     return {
-#         "status": "success",
-#         "message": f"Successfully integrated financial state.",
-#         "fetched_sources": len(unified_state["raw_data"]),
-#         "data_gaps": unified_state["data_gaps"]
-#     }
-
-# # --- Agent Definition ---
-
-# data_integration_agent = LlmAgent(
-#     name="data_integration_agent",
-#     model="gemini-2.0-flash", # Using a powerful model for this critical foundational task
-#     description="The foundational data agent. It connects to the Fi MCP server, fetches all user financial data in parallel, and structures it into a unified state for all other agents to use.",
-#     instruction="""
-#         You are the 'Unified Financial Footprint Aggregator', the foundational data backbone for Project Artha.
-#         Your one and only function is to create a complete and accurate snapshot of a user's financial life.
-
-#         Your process:
-#         1.  You will be given a user's phone number.
-#         2.  You MUST use the `process_and_structure_data` tool to handle the entire workflow of authenticating, fetching, and structuring the data.
-#         3.  Do not attempt to interpret the data. Your job is to ensure it is fetched and stored correctly in the 'user:financial_state' object.
-#         4.  Report the final status of the operation (success, number of sources fetched, and any data gaps) back to the calling agent.
-#         You are a system-level agent and do not interact directly with end-users. Your work is the essential first step for any meaningful financial analysis.
-#     """,
-#     tools=[
-#         process_and_structure_data,
-#     ],
-#     output_key="data_integration_result"
-# )
-
-
-# agents/data_integration_agent.py
-
 import asyncio
+import aiohttp
+import json
+import uuid
 import time
-from google.adk.agents import LlmAgent
-from google.adk.tools import ToolContext
-from tools.fi_mcp_connector import ProductionFiMCPClient
 
-# The same global client instance is used, but we will reset it.
-mcp_client = ProductionFiMCPClient()
+class ServiceUnavailableError(Exception):
+    """Custom exception for service timeouts."""
+    pass
 
-async def process_and_structure_data(phone_number: str, tool_context: ToolContext) -> dict:
-    """
-    Orchestrates fetching all financial data for a user, ensuring the client
-    state is reset for each unique user request.
-    """
-    # This ensures we don't use a previous user's authentication or session.
-    # mcp_client.reset()
+async def call_with_circuit_breaker(func, *args, **kwargs):
+    try:
+        return await asyncio.wait_for(func(*args, **kwargs), timeout=30)
+    except asyncio.TimeoutError:
+        raise ServiceUnavailableError("Fi MCP service timeout")
+    except Exception as e:
+        # In a real-world scenario, you might want to log this error.
+        # For now, we'll just re-raise it.
+        raise
 
-    # 1. Authenticate the client for the current user
-    auth_success = await mcp_client.authenticate(phone_number)
-    if not auth_success:
-        return {"status": "error", "message": "Authentication with Fi MCP server failed."}
+class FiMCPClient:
+    def __init__(self, base_url="http://localhost:8080"):
+        self.base_url = base_url
+        self.session_id = None
+        self.authenticated = False
+
+    async def authenticate(self, phone_number):
+        self.session_id = f"mcp-session-{uuid.uuid4()}"
+        
+        # Wrap the authentication steps with the circuit breaker
+        async def _authenticate_steps():
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Mcp-Session-Id": self.session_id
+                }
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "fetch_net_worth", "arguments": {}}
+                }
+                async with session.post(f"{self.base_url}/mcp/stream", headers=headers, json=payload) as response:
+                    result = await response.json()
+                    content = result.get("result", {}).get("content", [{}])[0]
+                    login_data = json.loads(content.get("text", "{}"))
+                    if login_data.get("status") != "login_required":
+                        raise Exception("Authentication flow error: Did not get login_required status.")
+
+                login_form_data = {
+                    "sessionId": self.session_id,
+                    "phoneNumber": phone_number
+                }
+                async with session.post(f"{self.base_url}/login", data=login_form_data, headers={"Content-Type": "application/x-www-form-urlencoded"}) as response:
+                    if response.status == 200:
+                        self.authenticated = True
+                        return True
+                    else:
+                        raise Exception(f"Login failed with status: {response.status}")
+        
+        return await call_with_circuit_breaker(_authenticate_steps)
+
+    async def call_tool(self, tool_name, arguments=None):
+        if not self.authenticated:
+            raise Exception("Not authenticated. Call authenticate() first.")
+        
+        async def _call_tool_steps():
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": arguments or {}}
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "Mcp-Session-Id": self.session_id
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.post(f"{self.base_url}/mcp/stream", headers=headers, json=payload) as response:
+                    result = await response.json()
+                    content = result.get("result", {}).get("content", [{}])[0]
+                    return json.loads(content.get("text", "{}"))
+        
+        return await call_with_circuit_breaker(_call_tool_steps)
+
+class DataIntegrationAgent:
+    def __init__(self, mcp_client):
+        self.mcp_client = mcp_client
+        self.data_cache = {}
+        self.last_sync = {}
+
+    async def get_comprehensive_data(self, user_id, force_refresh=False):
+        """
+        Fetches all available financial data for a user from the Fi MCP server.
+        Implements caching to avoid redundant API calls.
+        """
+        cache_age = time.time() - self.last_sync.get(user_id, 0)
+        if not force_refresh and user_id in self.data_cache and cache_age < 3600: # 1 hour cache
+            print("Returning cached data.")
+            return self.data_cache[user_id]
+
+        print("Fetching fresh data from Fi MCP server...")
+        if not self.mcp_client.authenticated:
+            await self.mcp_client.authenticate(user_id)
+
+        data_sources = [
+            "fetch_net_worth",
+            "fetch_credit_report",
+            "fetch_epf_details",
+            "fetch_mf_transactions",
+            "fetch_bank_transactions",
+            "fetch_stock_transactions"
+        ]
+        
+        user_data = {}
+        for source in data_sources:
+            try:
+                print(f"  - Fetching {source}...")
+                data = await self.mcp_client.call_tool(source)
+                user_data[source] = data
+            except Exception as e:
+                print(f"  - Error fetching {source}: {e}")
+                user_data[source] = {"error": str(e), "available": False}
+        
+        self.data_cache[user_id] = user_data
+        self.last_sync[user_id] = time.time()
+        return user_data
+
+async def main():
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: python data_integration_agent.py <phone_number>")
+        sys.exit(1)
+
+    phone_number = sys.argv[1]
     
-    # ... (rest of the function is the same)
-    data_sources = [
-        "fetch_net_worth", "fetch_credit_report", "fetch_epf_details",
-        "fetch_mf_transactions", "fetch_bank_transactions", "fetch_stock_transactions"
-    ]
-    tasks = [mcp_client.call_tool(source) for source in data_sources]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    mcp_client = FiMCPClient()
+    data_agent = DataIntegrationAgent(mcp_client)
     
-    raw_financial_data = dict(zip(data_sources, results))
-    unified_state = {"raw_data": {}, "data_gaps": [], "integration_timestamp": time.time()}
+    print("🚀 Initializing Data Integration Agent...")
     
-    for source, result in raw_financial_data.items():
-        if isinstance(result, Exception):
-            unified_state["data_gaps"].append(source)
-        else:
-            unified_state["raw_data"][source] = result
-            
-    tool_context.state[f"user:financial_state"] = unified_state
-    
-    return {
-        "status": "success", "message": f"Successfully integrated financial state.",
-        "fetched_sources": len(unified_state["raw_data"]), "data_gaps": unified_state["data_gaps"]
-    }
+    try:
+        comprehensive_data = await data_agent.get_comprehensive_data(phone_number)
+        print("\n✅ Successfully fetched comprehensive financial data!")
+        
+        print("\n" + "="*50)
+        print("DATA SUMMARY")
+        print("="*50)
+        for key, value in comprehensive_data.items():
+            status = "✅ Fetched" if "error" not in value else "❌ Error"
+            print(f"- {key}: {status}")
+        print("="*50)
 
-# --- Agent Definition ---
-data_integration_agent = LlmAgent(
-    name="data_integration_agent",
-    model="gemini-2.0-flash",
-    description="The foundational data agent. It connects to the Fi MCP server, fetches all user financial data in parallel, and structures it into a unified state for all other agents to use.",
-    instruction="""
-        You are the 'Unified Financial Footprint Aggregator', the foundational data backbone for Project Artha.
-        Your one and only function is to create a complete and accurate snapshot of a user's financial life.
+        # Optionally, print the full data for inspection
+        # print("\n" + json.dumps(comprehensive_data, indent=2))
 
-        Your process:
-        1.  You will be given a user's phone number.
-        2.  You MUST use the `process_and_structure_data` tool to handle the entire workflow of authenticating, fetching, and structuring the data.
-        3.  Do not attempt to interpret the data. Your job is to ensure it is fetched and stored correctly in the 'user:financial_state' object.
-        4.  Report the final status of the operation (success, number of sources fetched, and any data gaps) back to the calling agent.
-        You are a system-level agent and do not interact directly with end-users. Your work is the essential first step for any meaningful financial analysis.
-    """,
-    tools=[process_and_structure_data],
-    output_key="data_integration_result"
-)
+    except Exception as e:
+        print(f"\n❌ A critical error occurred: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
