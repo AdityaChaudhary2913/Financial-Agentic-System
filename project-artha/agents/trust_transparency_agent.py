@@ -154,3 +154,73 @@ class TrustTransparencyAgent:
             explanation.append(f"3. **Cash Flow**: Review spending patterns to find ₹{total_debt * 0.05:,.0f}/month for accelerated payoff")
         
         return "\n".join(explanation)
+    
+    def add_illiquid_asset_explanations(self, illiquid_analysis: dict) -> str:
+        """
+        Transforms illiquid asset analysis into clear, actionable insights.
+        """
+        if not illiquid_analysis or isinstance(illiquid_analysis, str):
+            return illiquid_analysis
+        
+        explanation = ["💎 **ILLIQUID ASSET OPTIMIZATION ANALYSIS**\n"]
+        
+        # Liquidity Score Overview
+        liquidity_score = illiquid_analysis.get('liquidity_score', 0)
+        explanation.append(f"**Portfolio Liquidity Score:** {liquidity_score}/100")
+        
+        if liquidity_score >= 80:
+            explanation.append("🟢 Excellent liquidity - well balanced portfolio")
+        elif liquidity_score >= 60:
+            explanation.append("🟡 Good liquidity - minor optimizations possible") 
+        else:
+            explanation.append("🔴 Poor liquidity - significant optimization needed")
+        
+        # Asset Breakdown
+        breakdown = illiquid_analysis.get('asset_liquidity_breakdown', {})
+        if breakdown:
+            explanation.append("\n**Asset Liquidity Distribution:**")
+            total_value = sum(category["value"] for category in breakdown.values())
+            if total_value > 0:
+                for category, data in breakdown.items():
+                    percentage = (data["value"] / total_value) * 100
+                    explanation.append(f"• {category.replace('_', ' ').title()}: ₹{data['value']:,.0f} ({percentage:.1f}%)")
+        
+        # Dormant Assets Alert
+        dormant_assets = illiquid_analysis.get('dormant_assets', [])
+        if dormant_assets:
+            explanation.append(f"\n**🚨 Dormant Assets Detected ({len(dormant_assets)}):**")
+            for asset in dormant_assets[:3]:  # Show top 3
+                explanation.append(f"• {asset.get('type', 'Unknown')}: ₹{asset.get('value', 0):,.0f}")
+                explanation.append(f"  → {asset.get('recommendation', 'Review recommended')}")
+        
+        # Top Optimization Opportunities
+        opportunities = illiquid_analysis.get('optimization_opportunities', [])
+        if opportunities:
+            explanation.append(f"\n**🎯 Top Optimization Opportunities:**")
+            for opp in opportunities[:3]:  # Show top 3
+                impact_emoji = "🔥" if opp.get('impact') == 'high' else "📈" if opp.get('impact') == 'medium' else "💡"
+                explanation.append(f"{impact_emoji} **{opp.get('type', 'Optimization').replace('_', ' ').title()}**")
+                explanation.append(f"   Action: {opp.get('action', 'Review recommended')}")
+                if 'expected_gain' in opp:
+                    explanation.append(f"   Potential gain: ₹{opp['expected_gain']:,.0f}/year")
+        
+        # Emergency Readiness
+        emergency = illiquid_analysis.get('emergency_readiness', {})
+        if emergency:
+            explanation.append(f"\n**🆘 Emergency Readiness: {emergency.get('status', 'Unknown').title()}**")
+            explanation.append(f"• Immediately available: ₹{emergency.get('immediately_available', 0):,.0f}")
+            explanation.append(f"• Recommended emergency fund: ₹{emergency.get('recommended_emergency_fund', 0):,.0f}")
+            readiness_score = emergency.get('readiness_score', 0)
+            if readiness_score < 75:
+                explanation.append(f"⚠️ Consider increasing liquid emergency reserves")
+        
+        # Monetization Strategies
+        strategies = illiquid_analysis.get('monetization_strategies', [])
+        if strategies:
+            explanation.append(f"\n**💰 Asset Monetization Strategies:**")
+            for strategy in strategies:
+                explanation.append(f"• **{strategy.get('asset_type', 'Asset').title()}** (₹{strategy.get('value', 0):,.0f})")
+                for option in strategy.get('options', [])[:2]:  # Show top 2 options
+                    explanation.append(f"  - {option}")
+        
+        return "\n".join(explanation)

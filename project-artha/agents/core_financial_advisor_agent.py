@@ -1,13 +1,14 @@
 import os
 import asyncio
 import json
-import uuid
+import time
+from typing import Dict, List, Any, Optional
 from google.adk.agents import LlmAgent
-from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+from google.adk.runners import Runner
 from google.genai.types import Content, Part
 
-# Assuming the other agent files are in the same directory
+# Import all our specialized agents
 from agents.data_integration_agent import DataIntegrationAgent, FiMCPClient
 from agents.risk_profiling_agent import RiskProfilingAgent
 from agents.cultural_events_agent import CulturalEventsAgent
@@ -16,9 +17,12 @@ from agents.trust_transparency_agent import TrustTransparencyAgent
 from agents.regional_investment_agent import RegionalInvestmentAgent
 from agents.debt_management_agent import DebtManagementAgent
 from agents.anomaly_detection_agent import AnomalyDetectionAgent
+from agents.illiquid_asset_agent import IlliquidAssetAgent
+
 
 class FinancialAnalysisTool:
-    """A tool that encapsulates the logic for financial analysis using specialized agents."""
+    """Enhanced Financial Analysis Tool with Smart Agent Coordination"""
+    
     def __init__(self):
         self.mcp_client = FiMCPClient()
         self.data_agent = DataIntegrationAgent(self.mcp_client)
@@ -29,258 +33,524 @@ class FinancialAnalysisTool:
         self.regional_agent = RegionalInvestmentAgent()
         self.anomaly_agent = AnomalyDetectionAgent()
         self.debt_agent = DebtManagementAgent()
-        print("FinancialAnalysisTool initialized with all required agents.")
+        self.illiquid_agent = IlliquidAssetAgent()
+        
+        # Agent context tracking for intelligent coordination
+        self.agent_context = {
+            "last_analysis_time": 0,
+            "cached_financial_data": None,
+            "agent_performance": {},
+            "query_patterns": []
+        }
+        
+        print("🎭 Enhanced FinancialAnalysisTool with Smart Coordination initialized.")
+
+    def _assess_query_complexity(self, query: str) -> Dict[str, Any]:
+        """Assess query complexity and determine which agents are most relevant"""
+        query_lower = query.lower()
+        
+        # Agent relevance keywords
+        agent_relevance = {
+            "debt_management": ["loan", "debt", "emi", "credit", "borrow", "mortgage", "home loan"],
+            "illiquid_asset": ["optimize", "portfolio", "assets", "gold", "property", "idle", "dormant"],
+            "risk_profiling": ["risk", "spending", "behavior", "pattern", "discipline"],
+            "market_intelligence": ["market", "stock", "investment", "fund", "returns"],
+            "cultural_events": ["festival", "wedding", "diwali", "cultural", "celebration"],
+            "regional_investment": ["property", "real estate", "bangalore", "mumbai", "location"],
+            "anomaly_detection": ["unusual", "fraud", "suspicious", "alert", "strange"]
+        }
+        
+        # Calculate relevance scores
+        relevance_scores = {}
+        for agent, keywords in agent_relevance.items():
+            score = sum(1 for keyword in keywords if keyword in query_lower)
+            relevance_scores[agent] = score / len(keywords) if keywords else 0
+        
+        # Determine primary agents (score > 0.2)
+        primary_agents = [agent for agent, score in relevance_scores.items() if score > 0.2]
+        
+        # Always include data_integration as foundation
+        if "data_integration" not in primary_agents:
+            primary_agents.insert(0, "data_integration")
+        
+        return {
+            "complexity": "high" if len(primary_agents) > 3 else "medium" if len(primary_agents) > 1 else "simple",
+            "primary_agents": primary_agents,
+            "relevance_scores": relevance_scores,
+            "needs_comprehensive": any(word in query_lower for word in ["comprehensive", "complete", "all agents", "full analysis"])
+        }
 
     async def analyze_spending(self, user_id: str) -> str:
-        """
-        Analyzes the user's spending patterns based on their bank transactions.
-        """
-        print(f"Tool triggered: Analyzing spending for {user_id}")
+        """Enhanced spending analysis with contextual insights"""
+        print(f"🔍 Smart spending analysis for {user_id}")
         try:
-            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
+            financial_data = await self._get_or_fetch_data(user_id)
             bank_transactions = financial_data.get("fetch_bank_transactions")
+            
             if not bank_transactions or "error" in bank_transactions:
-                return json.dumps({"error": "Bank transaction data is unavailable."})
+                return json.dumps({"error": "Bank transaction data is unavailable.", "data_quality": "error"})
+            
+            # Core analysis
             profile = self.risk_agent.analyze_spending_patterns(bank_transactions)
-            return json.dumps(profile)
+            
+            # Add contextual insights from other agents
+            insights = {"primary_analysis": profile, "contextual_insights": []}
+            
+            # Add cultural context if relevant
+            try:
+                cultural_forecast = self.cultural_agent.forecast_cultural_expenses(bank_transactions)
+                if cultural_forecast and not isinstance(cultural_forecast, str):
+                    insights["contextual_insights"].append({
+                        "source": "cultural_intelligence",
+                        "insight": f"Cultural spending shows {cultural_forecast.get('confidence_level', 'moderate')} predictability"
+                    })
+            except:
+                pass
+            
+            # Add anomaly context
+            try:
+                anomalies = self.anomaly_agent.detect_spending_anomalies(bank_transactions)
+                if anomalies and not isinstance(anomalies, str):
+                    alert_count = len(anomalies.get('spending_anomalies', []))
+                    if alert_count > 0:
+                        insights["contextual_insights"].append({
+                            "source": "anomaly_detection",
+                            "insight": f"{alert_count} spending anomalies detected - review recommended"
+                        })
+            except:
+                pass
+            
+            insights["data_quality"] = "good"
+            insights["confidence"] = 0.85
+            
+            return self.trust_agent.add_risk_explanations(insights)
+            
         except Exception as e:
-            return json.dumps({"error": f"An unexpected error occurred: {e}"})
+            print(f"Error in spending analysis: {e}")
+            return json.dumps({"error": f"Analysis failed: {e}", "data_quality": "error"})
 
-    async def forecast_cultural_spending(self, user_id: str) -> str:
-        """
-        Provides a forecast for culturally significant expenses.
-        """
-        print(f"Tool triggered: Forecasting cultural spending for {user_id}")
+    async def get_comprehensive_financial_insights(self, user_id: str, query: str) -> str:
+        """New comprehensive analysis tool that intelligently coordinates all agents"""
+        print(f"🎯 Comprehensive financial insights for: {query}")
+        
+        start_time = time.time()
+        
         try:
-            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
+            # Assess query complexity
+            query_analysis = self._assess_query_complexity(query)
+            print(f"📊 Query complexity: {query_analysis['complexity']}, Primary agents: {query_analysis['primary_agents']}")
+            
+            # Get foundational data
+            financial_data = await self._get_or_fetch_data(user_id)
+            
+            # Coordinate relevant agents based on query
+            agent_results = {}
+            confidence_scores = {}
+            
+            # Always include data foundation
+            agent_results["data_foundation"] = self._extract_key_financial_metrics(financial_data)
+            confidence_scores["data_foundation"] = 0.95
+            
+            # Execute primary agents based on relevance
+            if "debt_management" in query_analysis['primary_agents']:
+                credit_report = financial_data.get("fetch_credit_report")
+                bank_transactions = financial_data.get("fetch_bank_transactions")
+                if credit_report and "error" not in credit_report:
+                    debt_analysis = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions)
+                    agent_results["debt_intelligence"] = debt_analysis
+                    confidence_scores["debt_intelligence"] = 0.9
+            
+            if "illiquid_asset" in query_analysis['primary_agents']:
+                illiquid_analysis = self.illiquid_agent.analyze_illiquid_assets(financial_data)
+                agent_results["asset_optimization"] = illiquid_analysis
+                confidence_scores["asset_optimization"] = 0.85
+            
+            if "risk_profiling" in query_analysis['primary_agents']:
+                bank_transactions = financial_data.get("fetch_bank_transactions")
+                if bank_transactions and "error" not in bank_transactions:
+                    risk_analysis = self.risk_agent.analyze_spending_patterns(bank_transactions)
+                    agent_results["behavioral_insights"] = risk_analysis
+                    confidence_scores["behavioral_insights"] = 0.8
+            
+            if "market_intelligence" in query_analysis['primary_agents']:
+                market_analysis = await self.market_agent.get_market_info(query)
+                agent_results["market_intelligence"] = market_analysis
+                confidence_scores["market_intelligence"] = 0.75
+            
+            if "regional_investment" in query_analysis['primary_agents']:
+                regional_analysis = await self.regional_agent.get_real_estate_info(query)
+                agent_results["location_intelligence"] = regional_analysis
+                confidence_scores["location_intelligence"] = 0.7
+            
+            # Generate intelligent synthesis
+            analysis_time = time.time() - start_time
+            synthesis = self._synthesize_agent_results(agent_results, confidence_scores, query, analysis_time)
+            
+            return synthesis
+            
+        except Exception as e:
+            print(f"Error in comprehensive analysis: {e}")
+            return f"I encountered an error while analyzing your request: {str(e)}. Please try again or rephrase your question."
+
+    async def _get_or_fetch_data(self, user_id: str) -> Dict[str, Any]:
+        """Smart data fetching with caching"""
+        current_time = time.time()
+        
+        # Use cached data if recent (within 5 minutes)
+        if (self.agent_context["cached_financial_data"] and 
+            current_time - self.agent_context["last_analysis_time"] < 300):
+            print("📋 Using cached financial data")
+            return self.agent_context["cached_financial_data"]
+        
+        # Fetch fresh data
+        print("📊 Fetching fresh financial data...")
+        financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
+        
+        # Cache for future use
+        self.agent_context["cached_financial_data"] = financial_data
+        self.agent_context["last_analysis_time"] = current_time
+        
+        return financial_data
+
+    def _extract_key_financial_metrics(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract key financial metrics for synthesis"""
+        metrics = {}
+        
+        # Net worth
+        net_worth_data = financial_data.get('fetch_net_worth', {})
+        if net_worth_data.get('netWorthResponse'):
+            total_value = net_worth_data['netWorthResponse'].get('totalNetWorthValue', {})
+            if total_value:
+                metrics['net_worth'] = float(total_value.get('units', 0))
+        
+        # Income estimation (from bank transactions)
+        bank_transactions = financial_data.get('fetch_bank_transactions', {})
+        if bank_transactions.get('bankTransactions'):
+            total_credits = 0
+            credit_count = 0
+            
+            for bank in bank_transactions['bankTransactions']:
+                for txn in bank.get('txns', []):
+                    try:
+                        amount_str, _, _, txn_type, _, _ = txn
+                        if int(txn_type) == 1:  # CREDIT
+                            total_credits += float(amount_str)
+                            credit_count += 1
+                    except:
+                        continue
+            
+            if credit_count > 0:
+                # Rough monthly income estimate
+                estimated_months = max(1, credit_count / 15)  # ~15 credits per month
+                metrics['estimated_monthly_income'] = total_credits / estimated_months
+        
+        # Credit score
+        credit_report = financial_data.get('fetch_credit_report', {})
+        if credit_report.get('creditScore'):
+            score_data = credit_report['creditScore'].get('bureauScore', {})
+            if score_data:
+                metrics['credit_score'] = int(score_data.get('score', 0))
+        
+        return metrics
+
+    def _synthesize_agent_results(self, agent_results: Dict[str, Any], confidence_scores: Dict[str, float],
+                                query: str, analysis_time: float) -> str:
+        """Intelligently synthesize results from multiple agents"""
+        
+        synthesis_parts = []
+        
+        # Header with query context
+        synthesis_parts.append(f"**🎯 Comprehensive Financial Analysis**")
+        synthesis_parts.append(f"Query: {query}")
+        synthesis_parts.append(f"Analysis completed in {analysis_time:.1f}s using {len(agent_results)} intelligence sources\n")
+        
+        # Key financial foundation
+        if "data_foundation" in agent_results:
+            foundation = agent_results["data_foundation"]
+            net_worth = foundation.get('net_worth', 0)
+            income = foundation.get('estimated_monthly_income', 0)
+            credit_score = foundation.get('credit_score', 0)
+            
+            synthesis_parts.append("**📊 Financial Foundation:**")
+            if net_worth > 0:
+                synthesis_parts.append(f"• Net Worth: ₹{net_worth/100000:.1f}L")
+            if income > 0:
+                synthesis_parts.append(f"• Estimated Monthly Income: ₹{income:,.0f}")
+            if credit_score > 0:
+                synthesis_parts.append(f"• Credit Score: {credit_score}")
+            synthesis_parts.append("")
+        
+        # Debt analysis (if relevant)
+        if "debt_intelligence" in agent_results:
+            debt_data = agent_results["debt_intelligence"]
+            if isinstance(debt_data, dict):
+                synthesis_parts.append("**💳 Debt Analysis:**")
+                total_debt = debt_data.get('total_outstanding_debt', 0)
+                if total_debt > 0:
+                    synthesis_parts.append(f"• Total Outstanding Debt: ₹{total_debt:,.0f}")
+                
+                recommendations = debt_data.get('debt_optimization_recommendations', [])
+                if recommendations:
+                    synthesis_parts.append("• Key Recommendations:")
+                    for rec in recommendations[:2]:  # Top 2
+                        synthesis_parts.append(f"  - {rec}")
+                synthesis_parts.append("")
+        
+        # Asset optimization (if relevant)
+        if "asset_optimization" in agent_results:
+            asset_data = agent_results["asset_optimization"]
+            if isinstance(asset_data, dict):
+                synthesis_parts.append("**💎 Asset Optimization:**")
+                liquidity_score = asset_data.get('liquidity_score', 0)
+                if liquidity_score > 0:
+                    synthesis_parts.append(f"• Portfolio Liquidity Score: {liquidity_score}/100")
+                
+                opportunities = asset_data.get('optimization_opportunities', [])
+                if opportunities:
+                    synthesis_parts.append("• Optimization Opportunities:")
+                    for opp in opportunities[:2]:  # Top 2
+                        action = opp.get('action', 'Review recommended')
+                        impact = opp.get('impact', 'medium')
+                        synthesis_parts.append(f"  - {action} (Impact: {impact})")
+                synthesis_parts.append("")
+        
+        # Behavioral insights (if relevant) 
+        if "behavioral_insights" in agent_results:
+            behavioral_data = agent_results["behavioral_insights"]
+            if isinstance(behavioral_data, dict):
+                synthesis_parts.append("**🧠 Behavioral Intelligence:**")
+                
+                spending_ratio = behavioral_data.get('weekend_weekday_spending_ratio', 0)
+                if spending_ratio > 0:
+                    discipline_level = "High" if spending_ratio < 1.2 else "Moderate" if spending_ratio < 1.8 else "Needs Improvement"
+                    synthesis_parts.append(f"• Spending Discipline: {discipline_level} ({spending_ratio:.1f}x weekend ratio)")
+                
+                risk_tolerance = behavioral_data.get('risk_tolerance_indicator', 'moderate')
+                synthesis_parts.append(f"• Risk Profile: {risk_tolerance.title()}")
+                synthesis_parts.append("")
+        
+        # Market context (if relevant)
+        if "market_intelligence" in agent_results:
+            market_data = agent_results["market_intelligence"] 
+            if isinstance(market_data, str) and len(market_data) > 50:
+                synthesis_parts.append("**📈 Market Intelligence:**")
+                # Extract key insights from market data (first 200 chars)
+                market_summary = market_data[:200] + "..." if len(market_data) > 200 else market_data
+                synthesis_parts.append(f"• {market_summary}")
+                synthesis_parts.append("")
+        
+        # Confidence and transparency
+        overall_confidence = sum(confidence_scores.values()) / len(confidence_scores)
+        high_confidence_agents = [name for name, score in confidence_scores.items() if score > 0.8]
+        
+        synthesis_parts.append("**🔍 Analysis Transparency:**")
+        synthesis_parts.append(f"• Overall Confidence: {overall_confidence:.0%}")
+        synthesis_parts.append(f"• High-Confidence Sources: {len(high_confidence_agents)}/{len(agent_results)}")
+        synthesis_parts.append(f"• Primary Intelligence: {', '.join(high_confidence_agents)}")
+        
+        return "\n".join(synthesis_parts)
+
+    # Keep all existing individual tool methods
+    async def forecast_cultural_spending(self, user_id: str) -> str:
+        """Provides a forecast for culturally significant expenses."""
+        print(f"Tool triggered: Cultural spending forecast for {user_id}")
+        try:
+            financial_data = await self._get_or_fetch_data(user_id)
             bank_transactions = financial_data.get("fetch_bank_transactions")
+            
             if not bank_transactions or "error" in bank_transactions:
                 return json.dumps({"error": "Bank transaction data is unavailable."})
+                
             forecast = self.cultural_agent.forecast_cultural_expenses(bank_transactions)
-            return json.dumps(forecast)
+            enriched_response = self.trust_agent.add_cultural_explanations(forecast)
+            return enriched_response
+            
         except Exception as e:
             return json.dumps({"error": f"An unexpected error occurred: {e}"})
 
     async def get_market_data(self, query: str) -> str:
-        """
-        Fetches real-time market data for a given query.
-        """
-        print(f"Tool triggered: Getting market data for '{query}'")
+        """Fetches current market intelligence and trends."""
+        print(f"Tool triggered: Market data for query: {query}")
         try:
-            market_data = await self.market_agent.get_market_info(query)
-            return market_data
+            market_info = await self.market_agent.get_market_info(query)
+            return market_info
         except Exception as e:
-            return json.dumps({"error": f"An unexpected error occurred: {e}"})
+            return f"Market data unavailable: {e}"
 
     async def get_regional_investment_info(self, query: str) -> str:
-        """Uses the web to answer a real estate market query."""
-        print(f"Tool triggered: Getting regional investment info for '{query}'")
+        """Provides regional investment insights."""
+        print(f"Tool triggered: Regional investment info for: {query}")
         try:
-            info = await self.regional_agent.get_real_estate_info(query)
-            return info
+            regional_info = await self.regional_agent.get_real_estate_info(query)
+            return regional_info
         except Exception as e:
-            return f"An unexpected error occurred: {e}"
+            return f"Regional investment data unavailable: {e}"
 
     async def get_debt_summary(self, user_id: str) -> str:
-        """
-        Provides an intelligent debt summary with contextual insights and actionable recommendations.
-        """
-        print(f"Tool triggered: Getting intelligent debt summary for {user_id}")
+        """Analyzes debt obligations and optimization strategies."""
+        print(f"Tool triggered: Debt analysis for {user_id}")
         try:
-            # Step 1: Get comprehensive financial data
-            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
+            financial_data = await self._get_or_fetch_data(user_id)
             credit_report = financial_data.get("fetch_credit_report")
             bank_transactions = financial_data.get("fetch_bank_transactions")
-            net_worth = financial_data.get("fetch_net_worth")
-
+            
             if not credit_report or "error" in credit_report:
-                return "Credit report data is unavailable for debt analysis."
+                return json.dumps({"error": "Credit report data is unavailable."})
                 
-            # Step 2: Multi-agent intelligent analysis
             debt_analysis = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions)
-            
-            # Step 3: Get behavioral insights from risk agent
-            spending_behavior = None
-            if bank_transactions and "error" not in bank_transactions:
-                spending_behavior = self.risk_agent.analyze_spending_patterns(bank_transactions)
-            
-            # Step 4: Get market context for debt optimization
-            market_context = await self.market_agent.get_market_info("current home loan interest rates India 2025")
-            
-            # Step 5: Generate intelligent insights
-            intelligent_summary = self._synthesize_debt_intelligence(
-                debt_analysis, spending_behavior, market_context, net_worth
-            )
-            
-            # Step 6: Add transparency layer
-            enriched_response = self.trust_agent.add_debt_analysis_explanations(intelligent_summary)
-            
+            enriched_response = self.trust_agent.add_debt_explanations(debt_analysis)
             return enriched_response
             
         except Exception as e:
-            print(f"Error during intelligent debt summary: {e}")
-            return f"An unexpected error occurred during debt analysis: {e}"
-
-
-    async def explain_anomaly_detection_process(self, user_id: str) -> str:
-        """
-        Detects spending anomalies and explains the process to the user.
-
-        Args:
-            user_id: The user's phone number for authentication and data fetching.
-
-        Returns:
-            A string containing the explanation of the anomaly detection process.
-        """
-        print(f"Tool triggered: Explaining anomaly detection for {user_id}")
-        try:
-            # First, get the raw analysis
-            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
-            bank_transactions = financial_data.get("fetch_bank_transactions")
-            if not bank_transactions or "error" in bank_transactions:
-                return "Could not retrieve bank transaction data to analyze."
-
-            anomaly_data = self.anomaly_agent.detect_spending_anomalies(bank_transactions)
-
-            # Now, get the explanation
-            explanation = self.trust_agent.explain_anomaly_detection(anomaly_data)
-            return explanation
-        except Exception as e:
-            print(f"Error during anomaly detection explanation: {e}")
-            return f"An unexpected error occurred: {e}"
+            return json.dumps({"error": f"Debt analysis failed: {e}"})
 
     async def get_risk_analysis_explanation(self, user_id: str) -> str:
-        """
-        Analyzes a user's spending and provides a human-readable explanation.
-        """
-        print(f"Tool triggered: Explaining risk analysis for {user_id}")
+        """Provides detailed risk profiling with explanations."""
+        print(f"Tool triggered: Risk analysis explanation for {user_id}")
         try:
-            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
+            financial_data = await self._get_or_fetch_data(user_id)
             bank_transactions = financial_data.get("fetch_bank_transactions")
             
             if not bank_transactions or "error" in bank_transactions:
-                return "Could not retrieve bank transaction data to analyze."
+                return "Risk analysis unavailable due to insufficient transaction data."
                 
             risk_profile = self.risk_agent.analyze_spending_patterns(bank_transactions)
-            explanation = self.trust_agent.explain_risk_analysis(risk_profile)
-            
-            return explanation
+            return self.trust_agent.add_risk_explanations(risk_profile)
             
         except Exception as e:
-            return f"An unexpected error occurred: {e}"
-        
-    def _synthesize_debt_intelligence(self, debt_data, behavior_data, market_context, net_worth_data):
-        """Synthesizes multi-agent insights into intelligent recommendations."""
-        
-        total_debt = debt_data.get('total_outstanding_debt', 0)
-        credit_cards = debt_data.get('credit_cards', [])
-        loans = debt_data.get('loans', [])
-        
-        # Intelligent analysis
-        insights = []
-        
-        # Debt utilization intelligence
-        if credit_cards:
-            for card in credit_cards:
-                utilization = card['current_balance'] / card['credit_limit'] * 100 if card['credit_limit'] > 0 else 0
-                if utilization > 30:
-                    insights.append(f"⚠️ Your {card['issuer']} card is {utilization:.1f}% utilized. High utilization affects credit score - consider paying down to under 30%.")
-        
-        # Behavioral correlation
-        if behavior_data:
-            weekend_ratio = behavior_data.get('weekend_weekday_spending_ratio', 0)
-            if weekend_ratio > 1.2 and total_debt > 0:
-                insights.append(f"💡 Your weekend spending is {weekend_ratio:.1f}x your weekday spending. Reducing discretionary weekend expenses could accelerate debt payoff by ~₹{total_debt * 0.1:,.0f} annually.")
-        
-        # Market intelligence integration
-        if "interest rates" in market_context.lower():
-            insights.append(f"📈 Market Intelligence: {market_context[:200]}... Consider refinancing if your loan rates are above current market rates.")
-        
-        return {
-            "debt_summary": debt_data,
-            "intelligent_insights": insights,
-            "behavioral_correlation": behavior_data,
-            "market_context": market_context
-        }
-    
+            return f"Risk analysis error: {e}"
+
+    async def explain_anomaly_detection_process(self, user_id: str) -> str:
+        """Explains the anomaly detection process and findings."""
+        print(f"Tool triggered: Anomaly detection explanation for {user_id}")
+        try:
+            financial_data = await self._get_or_fetch_data(user_id)
+            bank_transactions = financial_data.get("fetch_bank_transactions")
+            
+            if not bank_transactions or "error" in bank_transactions:
+                return "Anomaly detection unavailable due to insufficient transaction data."
+                
+            anomalies = self.anomaly_agent.detect_spending_anomalies(bank_transactions)
+            return self.trust_agent.add_anomaly_explanations(anomalies)
+            
+        except Exception as e:
+            return f"Anomaly detection error: {e}"
+
+    async def get_illiquid_asset_optimization(self, user_id: str) -> str:
+        """Analyzes illiquid and dormant assets with optimization recommendations."""
+        print(f"Tool triggered: Illiquid asset optimization for {user_id}")
+        try:
+            financial_data = await self._get_or_fetch_data(user_id)
+            analysis = self.illiquid_agent.analyze_illiquid_assets(financial_data)
+            enriched_response = self.trust_agent.add_illiquid_asset_explanations(analysis)
+            return enriched_response
+            
+        except Exception as e:
+            return f"Illiquid asset analysis error: {e}"
+
 
 class CoreFinancialAdvisorAgent:
+    """Enhanced Core Financial Advisor with Intelligent Multi-Agent Coordination"""
+    
     def __init__(self):
         self.analysis_tool = FinancialAnalysisTool()
-        self.trust_agent = TrustTransparencyAgent()
         
-        # Define the high-level agent using Google ADK
-        # Update the agent instruction in CoreFinancialAdvisorAgent.__init__
-
+        # Enhanced agent with intelligent tool selection
         self.agent = LlmAgent(
             model="gemini-2.0-flash",
             name="core_financial_advisor",
             instruction=(
-                "You are an intelligent financial advisor orchestrating a team of AI specialists. "
-                "Your role is to provide comprehensive, contextual financial insights by coordinating "
-                "multiple agents and synthesizing their expertise into actionable advice.\n\n"
+                "You are an intelligent financial advisor powered by 10 specialized AI agents. "
+                "Your role is to provide comprehensive, contextual financial insights by intelligently "
+                "coordinating multiple agents based on the user's specific needs.\n\n"
                 
-                "INTELLIGENCE PRINCIPLES:\n"
-                "• Always provide context and 'why' behind every recommendation\n"
-                "• Correlate behavioral patterns with financial data\n"
-                "• Identify optimization opportunities across all financial aspects\n"
-                "• Offer specific, actionable steps with quantified impacts\n"
-                "• Highlight risks and opportunities proactively\n\n"
+                "INTELLIGENT COORDINATION PRINCIPLES:\n"
+                "• Use get_comprehensive_financial_insights for complex queries requiring multiple agents\n"
+                "• Use specific tools (analyze_spending, get_debt_summary, etc.) for focused questions\n"
+                "• Always provide context and reasoning behind recommendations\n"
+                "• Quantify impacts with specific amounts and timelines\n"
+                "• Highlight both opportunities and risks\n"
+                "• Ensure recommendations are culturally appropriate for Indian context\n\n"
                 
-                "When processing requests:\n"
-                "1. Extract user_id from the prompt\n"
-                "2. Use multiple agents to gather comprehensive insights\n"
-                "3. Synthesize findings into intelligent recommendations\n"
-                "4. Always explain your reasoning and cite agent contributions\n"
-                "5. Provide immediate actions the user can take\n\n"
+                "TOOL SELECTION STRATEGY:\n"
+                "Complex/broad queries → get_comprehensive_financial_insights\n"
+                "Spending analysis → analyze_spending\n"
+                "Debt questions → get_debt_summary\n"
+                "Market queries → get_market_data\n"
+                "Property/location → get_regional_investment_info\n"
+                "Asset optimization → get_illiquid_asset_optimization\n"
+                "Risk profiling → get_risk_analysis_explanation\n\n"
                 
-                "Your responses should demonstrate the collective intelligence of all agents working together."
+                "Always explain your reasoning and provide actionable next steps."
             ),
             tools=[
-                self.analysis_tool.analyze_spending, 
-                self.analysis_tool.forecast_cultural_spending, 
+                self.analysis_tool.get_comprehensive_financial_insights,  # Primary orchestrator
+                self.analysis_tool.analyze_spending,
+                self.analysis_tool.forecast_cultural_spending,
                 self.analysis_tool.get_market_data,
                 self.analysis_tool.get_regional_investment_info,
                 self.analysis_tool.get_debt_summary,
                 self.analysis_tool.get_risk_analysis_explanation,
-                self.analysis_tool.explain_anomaly_detection_process
+                self.analysis_tool.explain_anomaly_detection_process,
+                self.analysis_tool.get_illiquid_asset_optimization
             ]
         )
         
         self.session_service = InMemorySessionService()
         self.runner = Runner(
-            agent=self.agent, 
-            app_name="project_artha", 
+            agent=self.agent,
+            app_name="project_artha_advisor",
             session_service=self.session_service
         )
-        print("CoreFinancialAdvisorAgent initialized with ADK Runner.")
+        
+        print("CoreFinancialAdvisorAgent initialized with intelligent coordination.")
 
     async def process_query(self, user_query: str, user_id: str) -> str:
-        """Processes a user's query using the ADK agent and its tools."""
-        session = await self.session_service.create_session(app_name="project_artha", user_id=user_id)
+        """Enhanced query processing with intelligent agent coordination"""
         
-        # Prepend the user_id to the query to make it available to the LLM
-        prompt_with_context = f"User ID: {user_id}\n\nQuery: {user_query}"
-        request_content = Content(role="user", parts=[Part(text=prompt_with_context)])
+        print(f"Processing query for {user_id}: '{user_query}'")
+        
+        session = await self.session_service.create_session(
+            app_name="project_artha_advisor",
+            user_id=user_id
+        )
+        
+        # Enhanced prompt that guides intelligent tool selection
+        enhanced_query = f"""
+        Financial Query: {user_query}
+        User ID: {user_id}
+        
+        Please analyze this query and use the most appropriate combination of tools to provide 
+        comprehensive, actionable financial advice. For complex queries involving multiple 
+        financial aspects, use get_comprehensive_financial_insights. For specific focused 
+        questions, use the relevant specialized tools.
+        
+        Ensure your response includes:
+        1. Clear recommendations with specific amounts/timelines
+        2. Risk considerations and mitigation strategies  
+        3. Reasoning behind your advice
+        4. Immediate actionable next steps
+        """
+        
+        content = Content(role="user", parts=[Part(text=enhanced_query)])
+        
         response_text = ""
-
-        print(f"\nProcessing query for {user_id}: '{user_query}'")
         async for event in self.runner.run_async(
-            user_id=user_id, 
+            user_id=user_id,
             session_id=session.id,
-            new_message=request_content
+            new_message=content
         ):
             if event.is_final_response():
-                if event.content is not None and hasattr(event.content, 'parts') and event.content.parts:
-                    response_text = event.content.parts[0].text
-                else:
-                    response_text = "No response content available."
+                response_text = event.content.parts[0].text if event.content.parts else ""
                 break
         
-        # Pass the response to the Trust and Transparency Agent for enrichment
-        enriched_response = self.trust_agent.add_financial_explanations(response_text if response_text is not None else "")
+        # Add final transparency layer  
+        enriched_response = self.analysis_tool.trust_agent.add_financial_explanations(
+            response_text if response_text else "I could not process your request at this time."
+        )
 
-        return enriched_response or "I could not process your request at this time."
+        return enriched_response
+
 
 async def main():
     import sys
@@ -295,8 +565,9 @@ async def main():
     phone_number = sys.argv[1]
     advisor_agent = CoreFinancialAdvisorAgent()
 
-    # This is the query that will trigger the debt summary tool
-    query = "Can I afford a 3 BHK home in Greater Noida around Pari Chowk? What are my current debts and how can I optimize them?"    
+    # Test with a comprehensive query
+    query = "Can I afford a ₹50L home loan? Please provide comprehensive analysis from all relevant agents."
+    
     try:
         final_response = await advisor_agent.process_query(user_query=query, user_id=phone_number)
         
