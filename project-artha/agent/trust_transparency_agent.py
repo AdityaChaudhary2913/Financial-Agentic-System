@@ -30,6 +30,69 @@ class TrustTransparencyAgent:
                 "template": "An average monthly spend of ₹{value} serves as your financial baseline. Understanding this helps in budgeting for future goals and identifying unusual spending months."
             }
         }
+    
+    def add_cultural_explanations(self, cultural_forecast: dict) -> str:
+                """
+                Transforms cultural spending forecast into clear, actionable insights with transparency.
+                """
+                if not cultural_forecast or isinstance(cultural_forecast, str):
+                    return cultural_forecast
+                
+                explanation = ["🎭 **CULTURAL SPENDING FORECAST ANALYSIS**\n"]
+                
+                # Forecast Overview
+                forecast_period = cultural_forecast.get('forecast_period', 'upcoming period')
+                total_forecast = cultural_forecast.get('total_cultural_spending_forecast', 0)
+                
+                explanation.append(f"**Forecast Period:** {forecast_period}")
+                explanation.append(f"**Projected Cultural Spending:** ₹{total_forecast:,.0f}")
+                
+                # Category Breakdown
+                categories = cultural_forecast.get('category_breakdown', {})
+                if categories:
+                    explanation.append("\n**Cultural Spending Categories:**")
+                    for category, amount in categories.items():
+                        percentage = (amount / total_forecast * 100) if total_forecast > 0 else 0
+                        explanation.append(f"• {category.replace('_', ' ').title()}: ₹{amount:,.0f} ({percentage:.1f}%)")
+                
+                # Historical Patterns
+                historical_data = cultural_forecast.get('historical_patterns', {})
+                if historical_data:
+                    avg_monthly = historical_data.get('average_monthly_cultural_spending', 0)
+                    trend = historical_data.get('spending_trend', 'stable')
+                    explanation.append(f"\n**Historical Context:**")
+                    explanation.append(f"• Average monthly cultural spending: ₹{avg_monthly:,.0f}")
+                    explanation.append(f"• Spending trend: {trend.title()}")
+                
+                # Upcoming Events
+                upcoming_events = cultural_forecast.get('upcoming_cultural_events', [])
+                if upcoming_events:
+                    explanation.append(f"\n**🎪 Upcoming Cultural Events ({len(upcoming_events)}):**")
+                    for event in upcoming_events[:3]:  # Show top 3
+                        explanation.append(f"• {event.get('event', 'Cultural Event')}: ₹{event.get('estimated_cost', 0):,.0f}")
+                        explanation.append(f"  Date: {event.get('date', 'TBD')}")
+                
+                # Seasonal Factors
+                seasonal_factors = cultural_forecast.get('seasonal_factors', {})
+                if seasonal_factors:
+                    explanation.append(f"\n**🌟 Seasonal Impact:**")
+                    for factor, impact in seasonal_factors.items():
+                        explanation.append(f"• {factor.replace('_', ' ').title()}: {impact}")
+                
+                # Recommendations
+                recommendations = cultural_forecast.get('recommendations', [])
+                if recommendations:
+                    explanation.append(f"\n**💡 Cultural Spending Recommendations:**")
+                    for rec in recommendations:
+                        explanation.append(f"• {rec}")
+                
+                # Methodology Transparency
+                explanation.append(f"\n**🔍 Forecast Methodology:**")
+                explanation.append(f"• Analysis based on {cultural_forecast.get('transactions_analyzed', 0)} historical transactions")
+                explanation.append(f"• Cultural spending identified using ML pattern recognition")
+                explanation.append(f"• Forecast confidence: {cultural_forecast.get('confidence_score', 0):.1f}%")
+                
+                return "\n".join(explanation)
 
     def explain_risk_analysis(self, risk_profile_data: dict) -> str:
         """
@@ -99,7 +162,6 @@ class TrustTransparencyAgent:
         else:
             # If no financial terms were found, return the original text
             return response_text
-    # Update to trust_transparency_agent.py
 
     def add_debt_analysis_explanations(self, debt_intelligence: dict) -> str:
         """

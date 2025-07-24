@@ -123,7 +123,7 @@ class FinancialAnalysisTool:
             insights["data_quality"] = "good"
             insights["confidence"] = 0.85
             
-            return self.trust_agent.add_risk_explanations(insights)
+            return self.trust_agent.explain_risk_analysis(insights)
             
         except Exception as e:
             print(f"Error in spending analysis: {e}")
@@ -156,7 +156,8 @@ class FinancialAnalysisTool:
                 credit_report = financial_data.get("fetch_credit_report")
                 bank_transactions = financial_data.get("fetch_bank_transactions")
                 if credit_report and "error" not in credit_report:
-                    debt_analysis = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions)
+                    bank_transactions_data = bank_transactions if bank_transactions is not None else {}
+                    debt_analysis = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions_data)
                     agent_results["debt_intelligence"] = debt_analysis
                     confidence_scores["debt_intelligence"] = 0.9
             
@@ -350,7 +351,6 @@ class FinancialAnalysisTool:
         
         return "\n".join(synthesis_parts)
 
-    # Keep all existing individual tool methods
     async def forecast_cultural_spending(self, user_id: str) -> str:
         """Provides a forecast for culturally significant expenses."""
         print(f"Tool triggered: Cultural spending forecast for {user_id}")
@@ -396,9 +396,12 @@ class FinancialAnalysisTool:
             
             if not credit_report or "error" in credit_report:
                 return json.dumps({"error": "Credit report data is unavailable."})
+            
+            # Ensure bank_transactions is a dictionary, not None
+            bank_transactions_data = bank_transactions if bank_transactions is not None else {}
                 
-            debt_analysis = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions)
-            enriched_response = self.trust_agent.add_debt_explanations(debt_analysis)
+            debt_analysis = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions_data)
+            enriched_response = self.trust_agent.add_debt_analysis_explanations(debt_analysis)
             return enriched_response
             
         except Exception as e:
@@ -415,7 +418,7 @@ class FinancialAnalysisTool:
                 return "Risk analysis unavailable due to insufficient transaction data."
                 
             risk_profile = self.risk_agent.analyze_spending_patterns(bank_transactions)
-            return self.trust_agent.add_risk_explanations(risk_profile)
+            return self.trust_agent.explain_risk_analysis(risk_profile)
             
         except Exception as e:
             return f"Risk analysis error: {e}"
@@ -431,7 +434,7 @@ class FinancialAnalysisTool:
                 return "Anomaly detection unavailable due to insufficient transaction data."
                 
             anomalies = self.anomaly_agent.detect_spending_anomalies(bank_transactions)
-            return self.trust_agent.add_anomaly_explanations(anomalies)
+            return self.trust_agent.explain_anomaly_detection(anomalies)
             
         except Exception as e:
             return f"Anomaly detection error: {e}"
