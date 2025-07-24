@@ -1,9 +1,9 @@
+import json
 import re
 
 class TrustTransparencyAgent:
     def __init__(self):
-        # This dictionary maps keywords found in the text to their explanation templates.
-        # We use regex to find the numbers associated with these keywords.
+        """Initializes the agent with explanation patterns."""
         self.explanation_patterns = {
             "weekend/weekday spending ratio": {
                 "regex": r"weekend spending is only about (\\d+)% of your weekday spending",
@@ -31,6 +31,54 @@ class TrustTransparencyAgent:
             }
         }
 
+    def explain_risk_analysis(self, risk_profile_data: dict) -> str:
+        """
+        Generates a human-readable explanation of a risk profile analysis.
+        """
+        if not risk_profile_data or "error" in risk_profile_data:
+            return "I could not generate an explanation because the risk analysis data is unavailable."
+
+        try:
+            explanation = ["Here's a simple breakdown of your spending behavior:\n"]
+            ratio = risk_profile_data.get('weekend_weekday_spending_ratio', 0)
+            largest_debit = risk_profile_data.get('largest_debit', 0)
+            debit_count = risk_profile_data.get('debit_transactions_count', 0)
+
+            explanation.append(f"- **Spending Ratio:** Your weekend vs. weekday spending ratio is {ratio}. A value above 1.0 often indicates significant discretionary (non-essential) spending.")
+            explanation.append(f"- **Largest Transaction:** Your single largest expense was for ₹{largest_debit:,.2f}. High-value transactions are important to track as they significantly impact your monthly cash flow.")
+            explanation.append(f"- **Transaction Volume:** You had {debit_count} spending transactions in the analyzed period.")
+
+            return "\n".join(explanation)
+        except Exception as e:
+            return f"An error occurred while generating the explanation: {e}"
+
+    def explain_anomaly_detection(self, anomaly_data: dict) -> str:
+        """
+        Generates a human-readable explanation of the anomaly detection logic.
+        """
+        if not anomaly_data or "error" in anomaly_data:
+            return "I could not generate an explanation because the anomaly detection data is unavailable."
+        
+        try:
+            explanation = ["Of course. Here is how I detected the spending anomaly step-by-step:\n"]
+            mean = anomaly_data.get('mean_spending', 0)
+            std_dev = anomaly_data.get('std_dev_spending', 0)
+            threshold = anomaly_data.get('anomaly_threshold', 0)
+            
+            explanation.append(f"1.  **Calculate Your Baseline:** First, I analyzed all your debit transactions to find your average spending per transaction, which is ₹{mean:,.2f}.")
+            explanation.append(f"2.  **Measure Spending Volatility:** Next, I calculated the standard deviation (a measure of how spread out your spending is), which is ₹{std_dev:,.2f}.")
+            explanation.append(f"3.  **Set the Anomaly Threshold:** I set a threshold for what would be considered an unusually large transaction. This is calculated as: Average + (2 * Standard Deviation) = ₹{threshold:,.2f}.")
+            
+            anomalies = anomaly_data.get("detected_anomalies", [])
+            if anomalies:
+                explanation.append(f"4.  **Identify the Anomaly:** Finally, I flagged the transaction of ₹{anomalies[0]['amount']:,.2f} because it exceeded this threshold.")
+            else:
+                explanation.append("4.  **Conclusion:** I did not find any transactions that exceeded this threshold. All your spending was within your normal, established pattern.")
+
+            return "\n".join(explanation)
+        except Exception as e:
+            return f"An error occurred while generating the anomaly explanation: {e}"
+
     def add_financial_explanations(self, response_text: str) -> str:
         """
         Scans the final response text for financial metrics and appends explanations.
@@ -51,14 +99,3 @@ class TrustTransparencyAgent:
         else:
             # If no financial terms were found, return the original text
             return response_text
-
-# Example of how this agent will be used
-if __name__ == '__main__':
-    agent = TrustTransparencyAgent()
-    
-    # This is a sample response from the CoreFinancialAdvisorAgent
-    sample_llm_response = "OK. I have analyzed your spending habits. Here is a summary: Your weekend spending is $5500.0, and your weekday spending is $309050.0. The ratio of weekend to weekday spending is 0.02. Your total debits are $314550.0, and your largest debit transaction was $72000.0. You had 9 debit transactions."
-
-    enriched_response = agent.add_financial_explanations(sample_llm_response)
-    
-    print(enriched_response)

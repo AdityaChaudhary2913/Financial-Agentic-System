@@ -14,6 +14,7 @@ from agents.cultural_events_agent import CulturalEventsAgent
 from agents.market_intelligence_agent import MarketIntelligenceAgent
 from agents.trust_transparency_agent import TrustTransparencyAgent
 from agents.regional_investment_agent import RegionalInvestmentAgent
+from agents.debt_management_agent import DebtManagementAgent
 from agents.anomaly_detection_agent import AnomalyDetectionAgent
 
 class FinancialAnalysisTool:
@@ -27,6 +28,7 @@ class FinancialAnalysisTool:
         self.trust_agent = TrustTransparencyAgent()
         self.regional_agent = RegionalInvestmentAgent()
         self.anomaly_agent = AnomalyDetectionAgent()
+        self.debt_agent = DebtManagementAgent()
         print("FinancialAnalysisTool initialized with all required agents.")
 
     async def analyze_spending(self, user_id: str) -> str:
@@ -79,6 +81,34 @@ class FinancialAnalysisTool:
         except Exception as e:
             return f"An unexpected error occurred: {e}"
 
+    async def get_debt_summary(self, user_id: str) -> str:
+        """
+        Provides a summary of the user's debt, including credit cards, loans, and past due accounts.
+
+        Args:
+            user_id: The user's phone number for authentication and data fetching.
+
+        Returns:
+            A JSON string containing the debt summary.
+        """
+        print(f"Tool triggered: Getting debt summary for {user_id}")
+        try:
+            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
+            credit_report = financial_data.get("fetch_credit_report")
+            bank_transactions = financial_data.get("fetch_bank_transactions")
+
+            if not credit_report or "error" in credit_report:
+                return json.dumps({"error": "Credit report data is unavailable."})
+                
+            if not bank_transactions or "error" in bank_transactions:
+                return json.dumps({"error": "Bank transaction data is unavailable."})
+
+            summary = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions)
+            return json.dumps(summary)
+        except Exception as e:
+            print(f"Error during debt summary retrieval: {e}")
+            return json.dumps({"error": f"An unexpected error occurred: {e}"})
+
     async def explain_anomaly_detection_process(self, user_id: str) -> str:
         """
         Detects spending anomalies and explains the process to the user.
@@ -106,34 +136,26 @@ class FinancialAnalysisTool:
             print(f"Error during anomaly detection explanation: {e}")
             return f"An unexpected error occurred: {e}"
 
+    async def get_risk_analysis_explanation(self, user_id: str) -> str:
+        """
+        Analyzes a user's spending and provides a human-readable explanation.
+        """
+        print(f"Tool triggered: Explaining risk analysis for {user_id}")
+        try:
+            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
+            bank_transactions = financial_data.get("fetch_bank_transactions")
+            
+            if not bank_transactions or "error" in bank_transactions:
+                return "Could not retrieve bank transaction data to analyze."
+                
+            risk_profile = self.risk_agent.analyze_spending_patterns(bank_transactions)
+            explanation = self.trust_agent.explain_risk_analysis(risk_profile)
+            
+            return explanation
+            
+        except Exception as e:
+            return f"An unexpected error occurred: {e}"
     
-
-    async def explain_anomaly_detection_process(self, user_id: str) -> str:
-        """
-        Detects spending anomalies and explains the process to the user.
-
-        Args:
-            user_id: The user's phone number for authentication and data fetching.
-
-        Returns:
-            A string containing the explanation of the anomaly detection process.
-        """
-        print(f"Tool triggered: Explaining anomaly detection for {user_id}")
-        try:
-            # First, get the raw analysis
-            financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
-            bank_transactions = financial_data.get("fetch_bank_transactions")
-            if not bank_transactions or "error" in bank_transactions:
-                return "Could not retrieve bank transaction data to analyze."
-
-            anomaly_data = self.anomaly_agent.detect_spending_anomalies(bank_transactions)
-
-            # Now, get the explanation
-            explanation = self.trust_agent.explain_anomaly_detection(anomaly_data)
-            return explanation
-        except Exception as e:
-            print(f"Error during anomaly detection explanation: {e}")
-            return f"An unexpected error occurred: {e}"
 
 class CoreFinancialAdvisorAgent:
     def __init__(self):
@@ -155,6 +177,8 @@ class CoreFinancialAdvisorAgent:
                 self.analysis_tool.forecast_cultural_spending, 
                 self.analysis_tool.get_market_data,
                 self.analysis_tool.get_regional_investment_info,
+                self.analysis_tool.get_debt_summary,
+                self.analysis_tool.get_risk_analysis_explanation,
                 self.analysis_tool.explain_anomaly_detection_process
             ]
         )
@@ -183,11 +207,14 @@ class CoreFinancialAdvisorAgent:
             new_message=request_content
         ):
             if event.is_final_response():
-                response_text = event.content.parts[0].text
+                if event.content is not None and hasattr(event.content, 'parts') and event.content.parts:
+                    response_text = event.content.parts[0].text
+                else:
+                    response_text = "No response content available."
                 break
         
         # Pass the response to the Trust and Transparency Agent for enrichment
-        enriched_response = self.trust_agent.add_financial_explanations(response_text)
+        enriched_response = self.trust_agent.add_financial_explanations(response_text if response_text is not None else "")
 
         return enriched_response or "I could not process your request at this time."
 
@@ -204,8 +231,8 @@ async def main():
     phone_number = sys.argv[1]
     advisor_agent = CoreFinancialAdvisorAgent()
 
-    # This is the complex query that will trigger multiple agents
-    query = "First, explain my spending habits to me in simple terms. Then, tell me about real estate investment opportunities in the area between Chennai and Bangalore."
+    # This is the query that will trigger the debt summary tool
+    query = "Can you give me a summary of my current debt?"
     
     try:
         final_response = await advisor_agent.process_query(user_query=query, user_id=phone_number)

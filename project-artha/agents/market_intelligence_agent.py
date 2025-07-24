@@ -41,7 +41,10 @@ class MarketIntelligenceAgent:
             new_message=request_content
         ):
             if event.is_final_response():
-                response_text = event.content.parts[0].text
+                if event.content and hasattr(event.content, 'parts') and event.content.parts:
+                    response_text = event.content.parts[0].text
+                else:
+                    response_text = str(event.content) if event.content else "No content available in response."
                 break
         
         return response_text or "Could not get market information at this time."
