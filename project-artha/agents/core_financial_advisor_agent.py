@@ -83,31 +83,44 @@ class FinancialAnalysisTool:
 
     async def get_debt_summary(self, user_id: str) -> str:
         """
-        Provides a summary of the user's debt, including credit cards, loans, and past due accounts.
-
-        Args:
-            user_id: The user's phone number for authentication and data fetching.
-
-        Returns:
-            A JSON string containing the debt summary.
+        Provides an intelligent debt summary with contextual insights and actionable recommendations.
         """
-        print(f"Tool triggered: Getting debt summary for {user_id}")
+        print(f"Tool triggered: Getting intelligent debt summary for {user_id}")
         try:
+            # Step 1: Get comprehensive financial data
             financial_data = await self.data_agent.get_comprehensive_data(user_id, force_refresh=True)
             credit_report = financial_data.get("fetch_credit_report")
             bank_transactions = financial_data.get("fetch_bank_transactions")
+            net_worth = financial_data.get("fetch_net_worth")
 
             if not credit_report or "error" in credit_report:
-                return json.dumps({"error": "Credit report data is unavailable."})
+                return "Credit report data is unavailable for debt analysis."
                 
-            if not bank_transactions or "error" in bank_transactions:
-                return json.dumps({"error": "Bank transaction data is unavailable."})
-
-            summary = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions)
-            return json.dumps(summary)
+            # Step 2: Multi-agent intelligent analysis
+            debt_analysis = self.debt_agent.analyze_debt_summary(credit_report, bank_transactions)
+            
+            # Step 3: Get behavioral insights from risk agent
+            spending_behavior = None
+            if bank_transactions and "error" not in bank_transactions:
+                spending_behavior = self.risk_agent.analyze_spending_patterns(bank_transactions)
+            
+            # Step 4: Get market context for debt optimization
+            market_context = await self.market_agent.get_market_info("current home loan interest rates India 2025")
+            
+            # Step 5: Generate intelligent insights
+            intelligent_summary = self._synthesize_debt_intelligence(
+                debt_analysis, spending_behavior, market_context, net_worth
+            )
+            
+            # Step 6: Add transparency layer
+            enriched_response = self.trust_agent.add_debt_analysis_explanations(intelligent_summary)
+            
+            return enriched_response
+            
         except Exception as e:
-            print(f"Error during debt summary retrieval: {e}")
-            return json.dumps({"error": f"An unexpected error occurred: {e}"})
+            print(f"Error during intelligent debt summary: {e}")
+            return f"An unexpected error occurred during debt analysis: {e}"
+
 
     async def explain_anomaly_detection_process(self, user_id: str) -> str:
         """
@@ -155,6 +168,40 @@ class FinancialAnalysisTool:
             
         except Exception as e:
             return f"An unexpected error occurred: {e}"
+        
+    def _synthesize_debt_intelligence(self, debt_data, behavior_data, market_context, net_worth_data):
+        """Synthesizes multi-agent insights into intelligent recommendations."""
+        
+        total_debt = debt_data.get('total_outstanding_debt', 0)
+        credit_cards = debt_data.get('credit_cards', [])
+        loans = debt_data.get('loans', [])
+        
+        # Intelligent analysis
+        insights = []
+        
+        # Debt utilization intelligence
+        if credit_cards:
+            for card in credit_cards:
+                utilization = card['current_balance'] / card['credit_limit'] * 100 if card['credit_limit'] > 0 else 0
+                if utilization > 30:
+                    insights.append(f"⚠️ Your {card['issuer']} card is {utilization:.1f}% utilized. High utilization affects credit score - consider paying down to under 30%.")
+        
+        # Behavioral correlation
+        if behavior_data:
+            weekend_ratio = behavior_data.get('weekend_weekday_spending_ratio', 0)
+            if weekend_ratio > 1.2 and total_debt > 0:
+                insights.append(f"💡 Your weekend spending is {weekend_ratio:.1f}x your weekday spending. Reducing discretionary weekend expenses could accelerate debt payoff by ~₹{total_debt * 0.1:,.0f} annually.")
+        
+        # Market intelligence integration
+        if "interest rates" in market_context.lower():
+            insights.append(f"📈 Market Intelligence: {market_context[:200]}... Consider refinancing if your loan rates are above current market rates.")
+        
+        return {
+            "debt_summary": debt_data,
+            "intelligent_insights": insights,
+            "behavioral_correlation": behavior_data,
+            "market_context": market_context
+        }
     
 
 class CoreFinancialAdvisorAgent:
@@ -163,14 +210,31 @@ class CoreFinancialAdvisorAgent:
         self.trust_agent = TrustTransparencyAgent()
         
         # Define the high-level agent using Google ADK
+        # Update the agent instruction in CoreFinancialAdvisorAgent.__init__
+
         self.agent = LlmAgent(
             model="gemini-2.0-flash",
             name="core_financial_advisor",
             instruction=(
-                "You are a core financial advisor. Your job is to understand user requests "
-                "and use the available tools to provide them with financial insights. "
-                "The user ID will be provided in the prompt. You must extract this ID and use it "
-                "when calling any tools that require a 'user_id'."
+                "You are an intelligent financial advisor orchestrating a team of AI specialists. "
+                "Your role is to provide comprehensive, contextual financial insights by coordinating "
+                "multiple agents and synthesizing their expertise into actionable advice.\n\n"
+                
+                "INTELLIGENCE PRINCIPLES:\n"
+                "• Always provide context and 'why' behind every recommendation\n"
+                "• Correlate behavioral patterns with financial data\n"
+                "• Identify optimization opportunities across all financial aspects\n"
+                "• Offer specific, actionable steps with quantified impacts\n"
+                "• Highlight risks and opportunities proactively\n\n"
+                
+                "When processing requests:\n"
+                "1. Extract user_id from the prompt\n"
+                "2. Use multiple agents to gather comprehensive insights\n"
+                "3. Synthesize findings into intelligent recommendations\n"
+                "4. Always explain your reasoning and cite agent contributions\n"
+                "5. Provide immediate actions the user can take\n\n"
+                
+                "Your responses should demonstrate the collective intelligence of all agents working together."
             ),
             tools=[
                 self.analysis_tool.analyze_spending, 
@@ -232,8 +296,7 @@ async def main():
     advisor_agent = CoreFinancialAdvisorAgent()
 
     # This is the query that will trigger the debt summary tool
-    query = "Can you give me a summary of my current debt?"
-    
+    query = "Can I afford a 3 BHK home in Greater Noida around Pari Chowk? What are my current debts and how can I optimize them?"    
     try:
         final_response = await advisor_agent.process_query(user_query=query, user_id=phone_number)
         

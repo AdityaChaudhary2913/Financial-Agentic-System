@@ -99,3 +99,58 @@ class TrustTransparencyAgent:
         else:
             # If no financial terms were found, return the original text
             return response_text
+    # Update to trust_transparency_agent.py
+
+    def add_debt_analysis_explanations(self, debt_intelligence: dict) -> str:
+        """
+        Transforms raw debt intelligence into clear, actionable insights.
+        """
+        if not debt_intelligence or isinstance(debt_intelligence, str):
+            return debt_intelligence
+        
+        debt_data = debt_intelligence.get('debt_summary', {})
+        insights = debt_intelligence.get('intelligent_insights', [])
+        
+        total_debt = debt_data.get('total_outstanding_debt', 0)
+        credit_cards = debt_data.get('credit_cards', [])
+        loans = debt_data.get('loans', [])
+        
+        explanation = ["🧠 **INTELLIGENT DEBT ANALYSIS**\n"]
+        
+        # Executive Summary
+        explanation.append(f"**Debt Overview:** You have ₹{total_debt:,.0f} in total outstanding debt across {len(credit_cards)} credit cards and {len(loans)} loans.")
+        
+        # Credit Card Intelligence
+        if credit_cards:
+            explanation.append("\n**Credit Card Analysis:**")
+            total_cc_debt = sum(card['current_balance'] for card in credit_cards)
+            total_cc_limit = sum(card['credit_limit'] for card in credit_cards)
+            overall_utilization = (total_cc_debt / total_cc_limit * 100) if total_cc_limit > 0 else 0
+            
+            explanation.append(f"• Total credit utilization: {overall_utilization:.1f}% (Optimal: <30%)")
+            
+            for card in credit_cards:
+                utilization = card['current_balance'] / card['credit_limit'] * 100 if card['credit_limit'] > 0 else 0
+                status = "🟢 Excellent" if utilization < 10 else "🟡 Good" if utilization < 30 else "🔴 High Risk"
+                explanation.append(f"• {card['issuer']}: ₹{card['current_balance']:,.0f} / ₹{card['credit_limit']:,.0f} ({utilization:.1f}%) - {status}")
+        
+        # Loan Intelligence  
+        if loans:
+            explanation.append("\n**Loan Analysis:**")
+            for loan in loans:
+                explanation.append(f"• {loan['type']}: ₹{loan['current_balance']:,.0f} outstanding")
+        
+        # Multi-Agent Insights
+        if insights:
+            explanation.append("\n**🔍 Multi-Agent Intelligence:**")
+            for insight in insights:
+                explanation.append(f"• {insight}")
+        
+        # Actionable Recommendations
+        explanation.append("\n**📋 Immediate Action Plan:**")
+        if total_debt > 0:
+            explanation.append(f"1. **Priority Focus**: Pay minimum on all accounts, then attack highest-interest debt first")
+            explanation.append(f"2. **Credit Score Protection**: Keep total utilization under 30% (currently {overall_utilization:.1f}%)")
+            explanation.append(f"3. **Cash Flow**: Review spending patterns to find ₹{total_debt * 0.05:,.0f}/month for accelerated payoff")
+        
+        return "\n".join(explanation)

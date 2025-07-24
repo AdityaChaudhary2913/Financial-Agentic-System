@@ -28,13 +28,41 @@ class MarketIntelligenceAgent:
         )
         print("MarketIntelligenceAgent initialized.")
 
+    # async def get_market_info(self, query: str) -> str:
+    #     """Uses the web to answer a financial market query."""
+    #     session = await self.session_service.create_session(app_name="market_intelligence", user_id="user_1")
+    #     request_content = Content(role="user", parts=[Part(text=query)])
+    #     response_text = ""
+
+    #     print(f"\nExecuting market query: '{query}'")
+    #     async for event in self.runner.run_async(
+    #         user_id="user_1", 
+    #         session_id=session.id,
+    #         new_message=request_content
+    #     ):
+    #         if event.is_final_response():
+    #             if event.content and hasattr(event.content, 'parts') and event.content.parts:
+    #                 response_text = event.content.parts[0].text
+    #             else:
+    #                 response_text = str(event.content) if event.content else "No content available in response."
+    #             break
+        
+    #     return response_text or "Could not get market information at this time."
+
+    # Update to market_intelligence_agent.py
+
     async def get_market_info(self, query: str) -> str:
-        """Uses the web to answer a financial market query."""
+        """Enhanced market analysis with intelligent context."""
+        
         session = await self.session_service.create_session(app_name="market_intelligence", user_id="user_1")
-        request_content = Content(role="user", parts=[Part(text=query)])
+        
+        # Enhance query with intelligent context
+        enhanced_query = f"Latest financial data India 2025: {query} - provide specific numbers, rates, and recent trends"
+        
+        request_content = Content(role="user", parts=[Part(text=enhanced_query)])
         response_text = ""
 
-        print(f"\nExecuting market query: '{query}'")
+        print(f"\nExecuting enhanced market query: '{enhanced_query}'")
         async for event in self.runner.run_async(
             user_id="user_1", 
             session_id=session.id,
@@ -43,11 +71,26 @@ class MarketIntelligenceAgent:
             if event.is_final_response():
                 if event.content and hasattr(event.content, 'parts') and event.content.parts:
                     response_text = event.content.parts[0].text
-                else:
-                    response_text = str(event.content) if event.content else "No content available in response."
+                    
+                    # Add intelligent analysis layer
+                    response_text = self._add_market_intelligence(response_text, query)
                 break
         
         return response_text or "Could not get market information at this time."
+
+    def _add_market_intelligence(self, raw_response: str, original_query: str) -> str:
+        """Add intelligent analysis to raw market data."""
+        
+        analysis = [f"**Market Intelligence Analysis:**\n{raw_response}"]
+        
+        # Add contextual intelligence based on query type
+        if "interest rate" in original_query.lower():
+            analysis.append(f"\n**💡 Intelligence Insight:** Current market rates suggest {'refinancing opportunities' if 'rate' in raw_response else 'stable market conditions'}.")
+        
+        if "gold" in original_query.lower():
+            analysis.append(f"\n**📈 Investment Context:** Gold prices impact portfolio allocation - consider rebalancing if >10% of portfolio.")
+        
+        return "\n".join(analysis)
 
 async def main():
     if "GOOGLE_API_KEY" not in os.environ:
