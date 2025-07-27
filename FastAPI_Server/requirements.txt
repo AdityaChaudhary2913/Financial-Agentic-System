@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+firebase-admin
+google-adk
+google-cloud-aiplatform[agent_engines,adk]>=1.60.0
