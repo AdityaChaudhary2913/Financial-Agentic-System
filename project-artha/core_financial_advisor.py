@@ -14,7 +14,7 @@ initial_state = {
 class FiMCPClient:
     """Exact copy from your working reference"""
     def __init__(self, base_url="http://localhost:8080"):
-        self.base_url = base_url
+        self.base_url = "https://artha-mcp-server.onrender.com"
         self.session_id = None
         self.authenticated = False
 
@@ -132,9 +132,7 @@ class FinancialAgent:
             except Exception as e:
                 print(f"Warning: Could not fetch {data_type}: {e}")
                 financial_data[data_type] = None
-        
-        
-        
+
         return financial_data
 
 # Create a global instance to be used by main.py

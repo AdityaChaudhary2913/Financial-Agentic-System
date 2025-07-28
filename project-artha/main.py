@@ -4,6 +4,7 @@ import asyncio
 import logging
 import json
 import aiohttp
+import os
 
 # Importing necessary modules and classes
 
@@ -17,9 +18,14 @@ from root_agent import create_root_agent
 logging.basicConfig(level=logging.INFO)
 
 # Initialize Firebase manager with your credentials
-
+credentials_path = os.getenv(
+    "FIREBASE_CREDENTIALS_PATH",
+    "multiagentfintech-firebase-adminsdk-fbsvc-7864e9d383.json",
+)
+if os.path.exists("/code/app"):  # Deployed environment
+    credentials_path = f"/code/app/{credentials_path}"
 firebase_manager = FirebaseManager(
-    credential_path="multiagentfintech-firebase-adminsdk-fbsvc-7864e9d383.json",
+    credential_path=credentials_path,
     database_url="https://multiagentfintech-default-rtdb.asia-southeast1.firebasedatabase.app",  # Replace with your Realtime Database URL
 )
 
@@ -95,12 +101,6 @@ async def call_agent_async(runner, user_id, session_id, query, financial_data = 
             session_id=session_id
         )
     if financial_data is None:
-        # 👈 Get the current session to access state data
-        # session = await runner.session_service.get_session(
-        #     app_name="artha", 
-        #     user_id=user_id, 
-        #     session_id=session_id
-        # )
         raw_data = session.state.get("user:raw_data", {})
     else:
         raw_data = financial_data
@@ -170,7 +170,7 @@ class FiMCPClient:
     """Exact copy from your working reference"""
 
     def __init__(self, base_url="http://localhost:8080"):
-        self.base_url = base_url
+        self.base_url = "https://artha-mcp-server.onrender.com"
         self.session_id = None
         self.authenticated = False
 
